@@ -1,6 +1,8 @@
 # udoo_neo_flight_controller
-Quadcopter Flight Controller based on Udoo Neo
-This code is inspired by Udoo-neo-quadcopter and YMFC-3D (brokking.net)
+Quadcopter Flight Controller based on Udoo Neo.
+
+
+This code is inspired by Udoo-neo-quadcopter and YMFC-3D (brokking.net).
 
 joystick.py runs on ubuntu as the controller, it enables you to control the quadcopter via network using a joystick. (thrustmaster t16000M)
 
