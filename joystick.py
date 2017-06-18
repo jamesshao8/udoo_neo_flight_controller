@@ -35,11 +35,11 @@ def main():
                 axis = joystick.get_axis( i )
                 #print "Axis",i,"value", axis
                 if i==0:
-                    roll = int(axis*(3.14/30)*100)+10
+                    roll = int(axis*(3.14/3)*100)+100
                 if i==1:
-                    pitch = int(axis*(3.14/30)*100)+10
+                    pitch = int(axis*(3.14/3)*100)+100
                 if i==2:
-                    yaw = int(axis*(3.14/30)*100)+10
+                    yaw = int(axis*(3.14/3)*100)+100
                 if i==3:
                     throttle = int((-axis+1)/2*100)
             
@@ -54,7 +54,47 @@ def main():
                     string="$QCPUL,1000,1000,1000,1000,*00\n"
                     sock.sendto(string,address)
 
-            string_check="$QCSTA,"+str(roll)+","+str(pitch)+","+str(yaw)+","+str(throttle)+","+str(enable)+","
+            if roll < 0:
+                roll_str = "000"
+            elif roll < 10:
+                roll_str = "00"+str(roll)
+            elif roll < 100:
+                roll_str = "0"+str(roll)
+            elif roll < 200:
+                roll_str = str(roll)
+            else:
+                roll_str = "200"
+
+            if pitch < 0:
+                pitch_str = "000"
+            elif pitch < 10:
+                pitch_str = "00"+str(pitch)
+            elif pitch < 100:
+                pitch_str = "0"+str(pitch)
+            elif pitch < 200:
+                pitch_str = str(pitch)
+            else:
+                pitch_str = "200"
+            
+            if yaw < 0:
+                yaw_str = "000"
+            elif yaw < 10:
+                yaw_str = "00"+str(yaw)
+            elif yaw < 100:
+                yaw_str = "0"+str(yaw)
+            elif yaw < 200:
+                yaw_str = str(yaw)
+            else:
+                yaw_str = "200"
+
+            if throttle < 10:
+                throttle_str = "00"+str(throttle)
+            elif throttle < 100:
+                throttle_str = "0"+str(throttle)
+            else:
+                throttle_str = str(throttle)
+
+            string_check="$QCSTA,"+roll_str+","+pitch_str+","+yaw_str+","+throttle_str+","+str(enable)+","
             string_check_list=list(string_check)
             checksum=0
             for item in string_check_list:
@@ -64,13 +104,13 @@ def main():
                 checksum_str = '0'+str(checksum)
             else:
                 checksum_str = str(checksum)
-            #string="$QCSTA,"+str(roll)+","+str(pitch)+","+str(yaw)+","+str(throttle)+","+str(enable)+",*00\n"
-            string="$QCSTA,"+str(roll)+","+str(pitch)+","+str(yaw)+","+str(throttle)+","+str(enable)+",*"+checksum_str+"\n"
-            if throttle !=50:
+
+            string="$QCSTA,"+roll_str+","+pitch_str+","+yaw_str+","+throttle_str+","+str(enable)+",*"+checksum_str+"\n"
+            if throttle !=50 and enable == 1:
                 start = 2
                 sock.sendto(string,address)
             else:
-                if start == 2:
+                if start == 2 and enable == 1:
                     sock.sendto(string,address)
                 else:
                     print "Sorry, Cant fly yet!"
@@ -86,7 +126,7 @@ def main():
               
 
 
-        time.sleep(0.2)
+        time.sleep(0.3)
 
     print "Ok."
 
