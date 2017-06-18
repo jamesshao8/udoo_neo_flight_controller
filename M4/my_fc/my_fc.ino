@@ -1,5 +1,5 @@
 #include <Wire.h>
-#include "FXAS21002C.h"
+#include <FXAS21002C.h>
 #include <Servo.h>
 
 
@@ -16,7 +16,7 @@ double phi, theta, psi;
 //PID gain and limit settings
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 1.3;               //Gain setting for the roll P-controller (1.3)
-float pid_i_gain_roll = 0.05;              //Gain setting for the roll I-controller (0.3)
+float pid_i_gain_roll = 0.5;              //Gain setting for the roll I-controller (0.3)
 float pid_d_gain_roll = 15;                //Gain setting for the roll D-controller (15)
 int pid_max_roll = 400;                    //Maximum output of the PID-controller (+/-)
 
@@ -25,9 +25,9 @@ float pid_i_gain_pitch = pid_i_gain_roll;  //Gain setting for the pitch I-contro
 float pid_d_gain_pitch = pid_d_gain_roll;  //Gain setting for the pitch D-controller.
 int pid_max_pitch = pid_max_roll;          //Maximum output of the PID-controller (+/-)
 
-float pid_p_gain_yaw = 4.0;                //Gain setting for the pitch P-controller. //4.0
+float pid_p_gain_yaw = 3;                //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.02;               //Gain setting for the pitch I-controller. //0.02
-float pid_d_gain_yaw = 0.0;                //Gain setting for the pitch D-controller.
+float pid_d_gain_yaw = 0;                //Gain setting for the pitch D-controller.
 int pid_max_yaw = 400;                     //Maximum output of the PID-controller (+/-)
 
 
@@ -76,8 +76,11 @@ float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_l
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
-uint32_t lastWrite,lastUpdate;
+uint32_t lastWrite,lastUpdate,compute_time;
 
+int cal_int;
+double gyro_roll_cal, gyro_pitch_cal, gyro_yaw_cal;
+byte highByte, lowByte;
 /**
  * Modes:
  * 0 = standby -> send no pulse or idle
@@ -92,6 +95,8 @@ void setup()
   // initialize digital pin 13 as an output
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
+
+                                              //Give the gyro time to start.
 
   Serial.begin(115200);
   Wire1.begin();
@@ -114,9 +119,21 @@ void setup()
   gyro.getGres();
 
   //calibrate gyro
-  digitalWrite(13, HIGH);
-  gyro.calibrate();
-  digitalWrite(13, LOW);
+  for (cal_int = 0; cal_int < 2000 ; cal_int ++){              //Take 2000 readings for calibration.
+    if(cal_int % 15 == 0)digitalWrite(13, !digitalRead(13));   //Change the led status to indicate calibration.
+    gyro_signalen();                                           //Read the gyro output.
+    gyro_roll_cal += gyro_roll;                                //Ad roll value to gyro_roll_cal.
+    gyro_pitch_cal += gyro_pitch;                              //Ad pitch value to gyro_pitch_cal.
+    gyro_yaw_cal += gyro_yaw;                                  //Ad yaw value to gyro_yaw_cal.
+    delayMicroseconds(1000);                                   //Wait 1000us.
+    delay(3);                                                  //Wait 3 milliseconds before the next loop.
+  }
+
+  //Now that we have 2000 measures, we need to devide by 2000 to get the average gyro offset.
+  gyro_roll_cal /= 2000;                                       //Divide the roll total by 2000.
+  gyro_pitch_cal /= 2000;                                      //Divide the pitch total by 2000.
+  gyro_yaw_cal /= 2000;                                        //Divide the yaw total by 2000.
+  
 
   pid_i_mem_roll = 0;
   pid_last_roll_d_error = 0;
@@ -146,6 +163,7 @@ void loop()
 
       calculate_pid();
       updateServo(); //update pwn signals
+      compute_time=micros()-lastUpdate;
     }
     
     if(micros() - lastWrite >= 500000)
@@ -159,12 +177,19 @@ void loop()
       Serial.print(",");
       Serial.print(gyro_yaw);
       Serial.print(",");
-      Serial.print(front_left);
+      Serial.print(pid_output_pitch);
       Serial.print(",");
-      Serial.print(checksum);
+      Serial.print(pid_output_roll);
       Serial.print(",");
-      Serial.print(checksumIn);
+      Serial.print(pid_output_yaw);
       Serial.print(",");
+      Serial.print(target_pitch);
+      Serial.print(",");
+      Serial.print(target_roll);
+      Serial.print(",");
+      Serial.print(target_yaw);
+      Serial.print(",");
+      Serial.print(compute_time);
       Serial.println("*00\n");
     }
     
@@ -289,8 +314,8 @@ void decodeMessage()
     for(it=startIndex;it<=stopIndex;it++) {
       if(buffer[it] == ',' || buffer[it] == '*') {
         strncpy (tempBuffer, buffer+startIndex, it-startIndex );
-        double roll_tmp = max(0,min(20,strtod(tempBuffer,NULL)));
-        target_roll = (roll_tmp - 10)*10;
+        double roll_tmp = max(0,min(200,strtod(tempBuffer,NULL)));
+        target_roll = (roll_tmp - 100)*0.4;
         break;
       }
     }
@@ -300,8 +325,8 @@ void decodeMessage()
     for(it=startIndex;it<=stopIndex;it++) {
       if(buffer[it] == ',' || buffer[it] == '*') {
         strncpy (tempBuffer, buffer+startIndex, it-startIndex );
-        double pitch_tmp = max(0,min(20,strtod(tempBuffer,NULL)));
-        target_pitch = (pitch_tmp - 10)*10;
+        double pitch_tmp = max(0,min(200,strtod(tempBuffer,NULL)));
+        target_pitch = (pitch_tmp - 100)*0.4;
         break;
       }
     }
@@ -311,8 +336,8 @@ void decodeMessage()
     for(it=startIndex;it<=stopIndex;it++) {
       if(buffer[it] == ',' || buffer[it] == '*') {
         strncpy (tempBuffer, buffer+startIndex, it-startIndex );
-        double yaw_tmp = max(0,min(20,strtod(tempBuffer,NULL)));
-        target_yaw = (yaw_tmp - 10)*10;
+        double yaw_tmp = max(0,min(200,strtod(tempBuffer,NULL)));
+        target_yaw = (yaw_tmp - 100)*0.4;
         break;
       }
     }
@@ -393,14 +418,17 @@ int calculateChecksum(uint8_t start,uint8_t stop)
 }
 
 void gyro_signalen(){
+  
   gyro.readGyroData();
-  gyro_pitch = (M_pi/180)*gyro.gyroData.x*gyro.gRes;
+  gyro_pitch = gyro.gyroData.x*gyro.gRes;
   gyro_pitch *= -1;
-  gyro_roll = (M_pi/180)*gyro.gyroData.y*gyro.gRes;
+  if(cal_int == 2000)gyro_pitch -= gyro_pitch_cal;  
+  gyro_roll = gyro.gyroData.y*gyro.gRes;
   gyro_roll *= -1;
-  gyro_yaw = (M_pi/180)*gyro.gyroData.z*gyro.gRes;
+  if(cal_int == 2000)gyro_roll -= gyro_roll_cal; 
+  gyro_yaw = gyro.gyroData.z*gyro.gRes;
   gyro_yaw *= -1;
-
+  if(cal_int == 2000)gyro_yaw -= gyro_yaw_cal;    
 }
 
 void calculate_pid(){
@@ -440,5 +468,3 @@ void calculate_pid(){
     
   pid_last_yaw_d_error = pid_error_temp;
 }
-
-
